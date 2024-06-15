@@ -1,150 +1,171 @@
 package org.task.processor;
 
-import org.task.domain.RentingDetailsDto;
-import org.task.domain.Vehicle;
+import org.task.domain.processor.PrintingDto;
+import org.task.domain.processor.RentingDetailsDto;
+import org.task.domain.vehicle.Vehicle;
 import org.task.exceptions.VehicleException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
 import java.time.LocalDate;
-import java.util.Locale;
 
 public abstract class VehicleRentingProcessor {
 
+  protected final Vehicle vehicle;
+  protected final String username;
+  protected final LocalDate initialDate;
   protected final int reservedRentalDays;
   protected final int actualRentalDays;
-  protected final LocalDate reservationStartDate;
-  protected final LocalDate reservationEndDate;
-  protected final LocalDate actualReturnDate;
+  private final static double EARLY_RETURNED_VEHICLE_RENTAL_COST = 0.5;
+  private final static double EARLY_RETURNED_VEHICLE_INSURANCE_COST = 1;
 
-  protected VehicleRentingProcessor(Integer reservedRentalDays, Integer actualRentalDays) throws VehicleException {
+  protected VehicleRentingProcessor(String username, Integer reservedRentalDays, Integer actualRentalDays, Vehicle vehicle, LocalDate initialDate) throws VehicleException {
     if (reservedRentalDays < actualRentalDays) {
       throw new VehicleException("Actual rental days can't be more than reserved rental days");
     }
+    if (username == null || username.isEmpty() || username.isBlank()) {
+      throw new VehicleException("Username can't be empty");
+    }
+    this.initialDate = initialDate;
+    this.vehicle = vehicle;
+    this.username = username;
     this.reservedRentalDays = reservedRentalDays;
     this.actualRentalDays = actualRentalDays;
-    this.reservationStartDate = LocalDate.now();
-    this.reservationEndDate = reservationStartDate.plusDays(reservedRentalDays);
-    this.actualReturnDate = reservationStartDate.plusDays(actualRentalDays);
   }
 
-  abstract void processRenting();
+  protected abstract BigDecimal getRentalCostImp();
 
-  protected void printRentingDetails(RentingDetailsDto detailsDto) {
+  protected abstract double getInsuranceCost();
 
-    String basicDetails = buildBasicDetails(detailsDto.getVehicle());
-    String totalCostDetails = buildTotalCostDetails(detailsDto.getRentalCost(), detailsDto.getTotalInsurances(), detailsDto.getTotalCost());
+  protected abstract boolean applyDiscount();
 
-    System.out.println(
-        basicDetails +
-            "Rental cost per day: $" + getDecimalFormat().format(detailsDto.getRentalCost()) + "\n" +
-            "Initial insurance cost: $" + getDecimalFormat().format(detailsDto.getInitialInsuranceCostPerDay()) + "\n" +
-            totalCostDetails
-    );
-  }
+  protected abstract double getDiscountInsurance();
 
-  protected void printRentingDetailsWithDiscount(RentingDetailsDto detailsDto) {
-    DecimalFormat df = getDecimalFormat();
+  protected abstract double getAdditionInsurancesPay();
 
-    String basicDetails = buildBasicDetails(detailsDto.getVehicle());
-    String totalCostDetails = buildTotalCostDetails(detailsDto.getRentalCost(), detailsDto.getTotalInsurances(), detailsDto.getTotalCost());
+  protected abstract boolean applyAdditionPay();
 
-    String builder = basicDetails +
-        "Rental cost per day: $" + df.format(detailsDto.getRentalCost()) + "\n" +
-        "Initial insurance per day: $" + df.format(detailsDto.getInitialInsuranceCostPerDay()) + "\n" +
-        "Insurance discount per day: $" + df.format(detailsDto.getInsurancesDiscountPerDay()) + "\n" +
-        "Insurance per day: $" + df.format(detailsDto.getInsuranceCostPerDay()) + "\n" +
-        totalCostDetails;
+  public void processRenting() {
+    BigDecimal rentCostPerDay = getRentalCostImp();
+    BigDecimal totalRentalCost = calculateTotalInsurancesOrTotalRent(rentCostPerDay, reservedRentalDays);
+    BigDecimal insurancesPerDay = calculateInsurancePerDay(getInsuranceCost(), vehicle.getValue());
 
-    System.out.println(builder);
-  }
+    PrintingDto.Builder printDtoBuilder = new PrintingDto.Builder();
 
-  protected void printRentingDetailsWithAdditionPay(RentingDetailsDto detailsDto) {
-    DecimalFormat df = getDecimalFormat();
+    RentingDetailsDto.Builder builder = new RentingDetailsDto.Builder()
+        .vehicle(vehicle)
+        .rentalCostPerDay(rentCostPerDay)
+        .initialInsuranceCostPerDay(insurancesPerDay)
+        .insuranceCostPerDay(insurancesPerDay)
+        .rentalCost(totalRentalCost);
 
-    String basicDetails = buildBasicDetails(detailsDto.getVehicle());
-    String totalCostDetails = buildTotalCostDetails(detailsDto.getRentalCost(), detailsDto.getTotalInsurances(), detailsDto.getTotalCost());
+    if (applyDiscount()) {
 
-    String builder = basicDetails +
-        "Rental cost per day: $" + df.format(detailsDto.getRentalCostPerDay()) + "\n" +
-        "Initial insurance cost: $" + df.format(detailsDto.getInitialInsuranceCostPerDay()) + "\n" +
-        "Insurance addition per day: $" + df.format(detailsDto.getAdditionPayInsurancesPerDay()) + "\n" +
-        "Insurance per day: $" + df.format(detailsDto.getInsuranceCostPerDay()) + "\n" +
-        totalCostDetails;
+      BigDecimal insureDiscountPerDay = calculateInsurancesWithDiscount(insurancesPerDay, getDiscountInsurance());
+      BigDecimal insurePerDayWithDiscount = insurancesPerDay.subtract(insureDiscountPerDay);
+      BigDecimal totalInsurances = calculateTotalInsurancesOrTotalRent(insurePerDayWithDiscount, reservedRentalDays);
+      BigDecimal totalCost = totalRentalCost.add(totalInsurances);
 
-    System.out.println(builder);
+      builder
+          .insurancesDiscountPerDay(insureDiscountPerDay)
+          .insuranceCostPerDay(insurePerDayWithDiscount)
+          .totalInsurances(totalInsurances)
+          .totalCost(totalCost);
+
+    } else if (applyAdditionPay()) {
+
+      BigDecimal insureAdditionalPayPerDay = calculateInsurancesWithAdditionPay(insurancesPerDay, getAdditionInsurancesPay());
+      BigDecimal insurePerDayWithAdditionalPay = insurancesPerDay.add(insureAdditionalPayPerDay);
+      BigDecimal totalInsurances = calculateTotalInsurancesOrTotalRent(insurePerDayWithAdditionalPay, reservedRentalDays);
+      BigDecimal totalCost = totalRentalCost.add(totalInsurances);
+
+      builder
+          .totalInsurances(totalInsurances)
+          .totalCost(totalCost)
+          .additionPayInsurancesPerDay(insureAdditionalPayPerDay)
+          .insuranceCostPerDay(insurePerDayWithAdditionalPay);
+
+    } else {
+
+      BigDecimal totalInsurances = calculateTotalInsurancesOrTotalRent(insurancesPerDay, reservedRentalDays);
+      BigDecimal totalCost = totalRentalCost.add(totalInsurances);
+
+      builder
+          .totalInsurances(totalInsurances)
+          .totalCost(totalCost);
+    }
+
+    RentingDetailsDto rentingDetailsDto = builder.build();
+
+
+    if (actualRentalDays < reservedRentalDays) {
+      BigDecimal remainingRent = calculateEarlyReturnedVehicleInsuranceCostOrRent(rentingDetailsDto.getRentalCostPerDay(), reservedRentalDays - actualRentalDays, EARLY_RETURNED_VEHICLE_RENTAL_COST);
+      BigDecimal remainingIncenses = calculateEarlyReturnedVehicleInsuranceCostOrRent(rentingDetailsDto.getInsuranceCostPerDay(), reservedRentalDays - actualRentalDays, EARLY_RETURNED_VEHICLE_INSURANCE_COST);
+
+      rentingDetailsDto.setTotalInsurances(rentingDetailsDto.getTotalInsurances().subtract(remainingIncenses));
+      rentingDetailsDto.setRentalCost(rentingDetailsDto.getRentalCost().subtract(remainingRent));
+      rentingDetailsDto.setTotalCost(rentingDetailsDto.getTotalCost().subtract(remainingRent).subtract(remainingIncenses));
+
+      printDtoBuilder
+          .earlyReturnedDiscountForInsurance(remainingIncenses)
+          .earlyReturnedDiscountForRent(remainingRent);
+    }
+
+    LocalDate reservationEndDate = initialDate.plusDays(reservedRentalDays);
+    LocalDate actualReturnDate = initialDate.plusDays(actualRentalDays);
+
+
+    PrintingDto printDto = printDtoBuilder
+        .reservedRentalDays(reservedRentalDays)
+        .actualRentalDays(actualRentalDays)
+        .reservationStartDate(initialDate)
+        .reservationEndDate(reservationEndDate)
+        .actualReturnDate(actualReturnDate)
+        .rentingDetailsDto(rentingDetailsDto)
+        .username(username)
+        .build();
+
+
+    RentingDetailsPrinter rentingDetailsPrinter = new RentingDetailsPrinter(printDto);
+
+    if (rentingDetailsDto.getAdditionPayInsurancesPerDay() != null) {
+      rentingDetailsPrinter.printRentingDetailsWithAdditionPay();
+    } else if (rentingDetailsDto.getInsurancesDiscountPerDay() != null) {
+      rentingDetailsPrinter.printRentingDetailsWithDiscount();
+    } else {
+      rentingDetailsPrinter.printRentingDetails();
+    }
   }
 
   protected int getRentalCostPerDay(int forLessThanWeek, int forMoreThanWeek) {
     return actualRentalDays < 7 ? forLessThanWeek : forMoreThanWeek;
   }
 
-  protected BigDecimal calculateInsurancePerDay(double insuranceCost, Double vehicleCost) {
+  private BigDecimal calculateInsurancePerDay(double insuranceCost, Double vehicleCost) {
     return BigDecimal.valueOf(insuranceCost)
         .multiply(BigDecimal.valueOf(vehicleCost))
         .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
   }
 
-  protected BigDecimal calculateTotalInsurances(BigDecimal insurancesPerDay) {
-    return insurancesPerDay.multiply(BigDecimal.valueOf(actualRentalDays))
+  private BigDecimal calculateTotalInsurancesOrTotalRent(BigDecimal insurancesOrRentPerDay, int days) {
+    return insurancesOrRentPerDay.multiply(BigDecimal.valueOf(days))
         .setScale(2, RoundingMode.HALF_UP);
   }
 
-  protected BigDecimal calculateInsurancesWithDiscount(BigDecimal insuranceCostPerDay, double discount) {
+  private BigDecimal calculateInsurancesWithDiscount(BigDecimal insuranceCostPerDay, double discount) {
     return insuranceCostPerDay.multiply(BigDecimal.valueOf(discount))
         .setScale(2, RoundingMode.HALF_UP);
   }
 
-  protected BigDecimal calculateInsurancesWithAdditionPay(BigDecimal insuranceCostPerDay, double additionPay) {
+  private BigDecimal calculateInsurancesWithAdditionPay(BigDecimal insuranceCostPerDay, double additionPay) {
     return insuranceCostPerDay.multiply(BigDecimal.valueOf(additionPay))
         .setScale(2, RoundingMode.HALF_UP);
   }
 
-  protected BigDecimal calculateRentalCost(BigDecimal rentalCost) {
-
-    BigDecimal totalRentalCost = rentalCost.multiply(BigDecimal.valueOf(actualRentalDays))
+  private BigDecimal calculateEarlyReturnedVehicleInsuranceCostOrRent(BigDecimal insurancesPerDayOrRent, int remainingDays, double earlyReturnedVehicleInsuranceCostOrRent) {
+    return insurancesPerDayOrRent.multiply(BigDecimal.valueOf(remainingDays))
+        .multiply(BigDecimal.valueOf(earlyReturnedVehicleInsuranceCostOrRent))
         .setScale(2, RoundingMode.HALF_UP);
-
-    if (actualRentalDays < reservedRentalDays) {
-      int remainingDays = reservedRentalDays - actualRentalDays;
-      totalRentalCost = totalRentalCost.add(rentalCost.multiply(BigDecimal.valueOf(remainingDays)).divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP));
-    }
-
-    return totalRentalCost;
   }
 
-  private DecimalFormat getDecimalFormat() {
-    DecimalFormatSymbols symbols = new DecimalFormatSymbols(Locale.getDefault());
-    symbols.setDecimalSeparator(',');
-    DecimalFormat df = new DecimalFormat("#0.00", symbols);
-    df.setGroupingUsed(false);
-    return df;
-  }
-
-  private String buildBasicDetails(Vehicle vehicle) {
-    return
-        "XXXXXXXXXX" + "\n" +
-            "Date: " + "\n" +
-            "Custom Name: " + "\n" +
-            "Rented Vehicle: " + vehicle.getBrand() + " " + vehicle.getModel() + "\n" +
-            "\n" +
-            "Reservation start date: " + reservationStartDate + "\n" +
-            "Reservation end date: " + reservationEndDate + "\n" +
-            "Reserved rental days: " + reservedRentalDays + " days" + "\n" +
-            "\n" +
-            "Actual return date: " + actualReturnDate + "\n" +
-            "Actual rental days: " + actualRentalDays + " days" + "\n" +
-            "\n";
-  }
-
-  private String buildTotalCostDetails(BigDecimal rentalCost, BigDecimal insuranceCost, BigDecimal totalCost) {
-    DecimalFormat df = getDecimalFormat();
-    return "\n" +
-        "Total rent: $" + df.format(rentalCost) + "\n" +
-        "Total insurance cost: $" + df.format(insuranceCost) + "\n" +
-        "Total cost: $" + df.format(totalCost) + "\n" +
-        "XXXXXXXXXX";
-  }
 }

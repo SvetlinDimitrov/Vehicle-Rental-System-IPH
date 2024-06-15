@@ -1,4 +1,4 @@
-package org.task.domain;
+package org.task.domain.vehicle;
 
 import org.task.exceptions.VehicleException;
 

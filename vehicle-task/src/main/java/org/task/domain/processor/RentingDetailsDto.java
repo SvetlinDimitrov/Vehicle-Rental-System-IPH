@@ -1,17 +1,19 @@
-package org.task.domain;
+package org.task.domain.processor;
+
+import org.task.domain.vehicle.Vehicle;
 
 import java.math.BigDecimal;
 
 public class RentingDetailsDto {
-  private final Vehicle vehicle;
-  private final BigDecimal rentalCostPerDay;
-  private final BigDecimal initialInsuranceCostPerDay;
-  private final BigDecimal insurancesDiscountPerDay;
-  private final BigDecimal additionPayInsurancesPerDay;
-  private final BigDecimal insuranceCostPerDay;
-  private final BigDecimal totalInsurances;
-  private final BigDecimal rentalCost;
-  private final BigDecimal totalCost;
+  private Vehicle vehicle;
+  private BigDecimal rentalCostPerDay;
+  private BigDecimal initialInsuranceCostPerDay;
+  private BigDecimal insurancesDiscountPerDay;
+  private BigDecimal additionPayInsurancesPerDay;
+  private BigDecimal insuranceCostPerDay;
+  private BigDecimal totalInsurances;
+  private BigDecimal rentalCost;
+  private BigDecimal totalCost;
 
   private RentingDetailsDto(Builder builder) {
     this.vehicle = builder.vehicle;
@@ -27,6 +29,42 @@ public class RentingDetailsDto {
 
   public Vehicle getVehicle() {
     return vehicle;
+  }
+
+  public void setVehicle(Vehicle vehicle) {
+    this.vehicle = vehicle;
+  }
+
+  public void setRentalCostPerDay(BigDecimal rentalCostPerDay) {
+    this.rentalCostPerDay = rentalCostPerDay;
+  }
+
+  public void setInitialInsuranceCostPerDay(BigDecimal initialInsuranceCostPerDay) {
+    this.initialInsuranceCostPerDay = initialInsuranceCostPerDay;
+  }
+
+  public void setInsurancesDiscountPerDay(BigDecimal insurancesDiscountPerDay) {
+    this.insurancesDiscountPerDay = insurancesDiscountPerDay;
+  }
+
+  public void setAdditionPayInsurancesPerDay(BigDecimal additionPayInsurancesPerDay) {
+    this.additionPayInsurancesPerDay = additionPayInsurancesPerDay;
+  }
+
+  public void setInsuranceCostPerDay(BigDecimal insuranceCostPerDay) {
+    this.insuranceCostPerDay = insuranceCostPerDay;
+  }
+
+  public void setTotalInsurances(BigDecimal totalInsurances) {
+    this.totalInsurances = totalInsurances;
+  }
+
+  public void setRentalCost(BigDecimal rentalCost) {
+    this.rentalCost = rentalCost;
+  }
+
+  public void setTotalCost(BigDecimal totalCost) {
+    this.totalCost = totalCost;
   }
 
   public BigDecimal getRentalCostPerDay() {
