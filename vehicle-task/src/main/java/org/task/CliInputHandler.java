@@ -69,7 +69,7 @@ public class CliInputHandler {
     try {
       System.out.print(CliWelcomeMessages.ENTER_VEHICLE_VALUE.getMessage());
       String input = scanner.nextLine();
-      if (input.isEmpty() || input.isBlank())
+      if (input.isEmpty() || input.isBlank() || Double.parseDouble(input) < 0)
         throw new VehicleException(CliBadMessages.INVALID_VEHICLE_VALUE.getMessage());
       Double.parseDouble(input);
       return input;

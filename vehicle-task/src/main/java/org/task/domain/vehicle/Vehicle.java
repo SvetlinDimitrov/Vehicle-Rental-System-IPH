@@ -10,13 +10,13 @@ public abstract class Vehicle {
 
   public Vehicle(String brand, String model, Double value) throws VehicleException {
     if (brand == null || brand.isBlank() || brand.isEmpty()) {
-      throw new VehicleException("Brand cannot be null, empty or blank");
+      throw new VehicleException("Vehicle brand cannot be null, empty or blank");
     }
     if (model == null || model.isBlank() || model.isEmpty()) {
-      throw new VehicleException("Model cannot be null, empty or blank");
+      throw new VehicleException("Vehicle model cannot be null, empty or blank");
     }
     if (value == null || value < 0) {
-      throw new VehicleException("Value cannot be null or negative");
+      throw new VehicleException("Vehicle price cannot be null or negative");
     }
     this.brand = brand;
     this.model = model;
